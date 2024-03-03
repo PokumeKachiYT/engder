@@ -1,5 +1,4 @@
 from requests import Session
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton
 
 session = Session()
 
@@ -40,17 +39,6 @@ def get_word():
     definition = definition[0].upper() + definition[1:]
 
     print(word + ': ' + definition)
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Hello, World!")
-
-        button = QPushButton("My simple app.")
-        button.pressed.connect(get_word)
-
-        self.setCentralWidget(button)
-        self.show()
 
 # Create the app, the main window, and run the app
 #app = QApplication([])
