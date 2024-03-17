@@ -1,65 +1,67 @@
-import { Dimensions } from 'react-native';
-const { width, height } = Dimensions.get('window');
+import { Dimensions } from 'react-native'
+const { width, height } = Dimensions.get('window')
 
-const guidelineBaseWidth = 350;
-const guidelineBaseHeight = 680;
-
-const scale = size => width / guidelineBaseWidth * size;
-const verticalScale = size => height / guidelineBaseHeight * size;
-const moderateScale = (size, factor = 0.5) => size + ( scale(size) - size ) * factor;
-
-//export {scale, verticalScale, moderateScale};
-
-import { useFonts } from "expo-font";
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-import { PanResponder, Animated } from 'react-native';
-import React, { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from "expo-font"
+import { StatusBar } from 'expo-status-bar'
+import { StyleSheet, Text, View } from 'react-native'
+import { PanResponder, Animated } from 'react-native'
+import React, { useState, useEffect, useRef } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const saveData = async (key, value) => {
   try {
-    await AsyncStorage.setItem(key, JSON.stringify(value));
+    await AsyncStorage.setItem(key, JSON.stringify(value))
   } catch (error) {
-    console.error('Error saving data:', error);
+    console.error('Error saving data:', error)
   }
-};
+}
 
 const getData = async (key) => {
   try {
-    const jsonValue = await AsyncStorage.getItem(key);
-    return jsonValue != null ? JSON.parse(jsonValue) : null;
+    const jsonValue = await AsyncStorage.getItem(key)
+    return jsonValue != null ? JSON.parse(jsonValue) : null
   } catch (error) {
-    console.error('Error retrieving data:', error);
+    console.error('Error retrieving data:', error)
   }
-};
+}
 
 export default function App() {
-  const [pan] = useState(new Animated.ValueXY()) // Animated value to track pan position
-
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onPanResponderMove: Animated.event([
+  const [rotateY, setRotateY] = useState('0deg')
+  const pan = useRef(new Animated.ValueXY()).current
+  
+  const panEvent = Animated.event(
+    [
       null,
-      { dx: pan.x, dy: pan.y } // Update pan position on move
-    ]),
-    onPanResponderRelease: () => {
-      // You can perform actions when the pan gesture is released
-    }
-  });
+      {dx: pan.x, dy: pan.y}
+    ],
+    {useNativeDriver: false}
+  )
 
-  const [posts, setPosts] = useState([])
-  const [words,setWords] = useEffect([])
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (event, gestureState) => {
+        panEvent(event, gestureState)
+        const panX = pan.x.__getValue()
+        setRotateY(
+          panX / width * 150 + 'deg'
+        )
+      },
+
+      onPanResponderRelease: () => {
+        pan.extractOffset()
+      },
+    }),
+  ).current
+
+  const words = useRef([])
 
   useEffect( () => {
     getData('100000-data')
     .then( (arr) => {
-      setWords(arr)
-      console.log('fonud data')
+      words.current = arr
       
-      if (words === null) {
-        console.log('data invalid, fetching new data')
-
+      if (words.current === null) {
         fetch('https://www.mit.edu/~ecprice/wordlist.100000')
         .then( (res) => {
           if (res.ok) {
@@ -73,44 +75,63 @@ export default function App() {
         } )
       }
     } )
-  }, []);
+  }, [])
 
   const [fontsLoaded] = useFonts({
-    'JetBrains': require('./assets/fonts/JetBrains.ttf')
-  });
+    'JetBrains': require('./assets/fonts/JetBrains.ttf'),
+    'SoftRegular': require('./assets/fonts/SoftRegular.ttf'),
+    'SoftBold': require('./assets/fonts/SoftBold.ttf'),
+  })
 
   if (!fontsLoaded) {
-    return <Text>Loading...</Text>;
+    return <Text>Loading...</Text>
   }
 
   return (
     <View style={styles.container}>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        style={styles.word_box}
-      >life roblox</Text>
-      <StatusBar style="auto" />
+      <Animated.View
+        style={{
+          //backgroundColor: "#000000",
+
+          transform: [
+            {translateX: pan.x},
+            //{translateY: pan.y},
+          ],
+          width: '100%',
+          height: '100%',
+        }}
+        {...panResponder.panHandlers}>
+
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          style={{
+            fontSize: 32,
+            fontFamily: 'SoftBold',
+            
+            transform: [
+              {rotateY: rotateY},
+            ],
+
+            color: '#6200EE',
+
+            alignSelf: 'center',
+            textAlign: 'center',
+            textAlignVertical: 'center',
+            width: '100%',
+            height: '100%',
+          }}
+        >life roblox</Text>
+      </Animated.View>
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#7700FF',
+    backgroundColor: '#9955FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  word_box: {
-    fontSize: 64,
-    fontFamily: 'JetBrains',
-
-    backgroundColor: '#9955FF',
-    color: '#6200EE',
-
-    alignSelf: 'center',
-    textAlign: 'center',
-    width: '80%',
-  },
-});
+})
