@@ -7,6 +7,12 @@ import { StyleSheet, Text, View } from 'react-native'
 import { PanResponder, Animated } from 'react-native'
 import React, { useState, useEffect, useRef } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { LinearGradient } from 'expo-linear-gradient';
+
+let panning = false
+const maxRotation = 60
+
+let lastUpdate = Date.now()
 
 const saveData = async (key, value) => {
   try {
@@ -27,6 +33,8 @@ const getData = async (key) => {
 
 export default function App() {
   const [rotateY, setRotateY] = useState('0deg')
+  const [offsetX, setOffsetX] = useState(0)
+
   const pan = useRef(new Animated.ValueXY()).current
   
   const panEvent = Animated.event(
@@ -39,20 +47,40 @@ export default function App() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => {
+        panning = true
+        return true
+      },
       onPanResponderMove: (event, gestureState) => {
         panEvent(event, gestureState)
-        const panX = pan.x.__getValue()
         setRotateY(
-          panX / width * 150 + 'deg'
+          Math.max(-maxRotation,Math.min(maxRotation,pan.x.__getValue() * Math.abs(pan.x.__getValue() / 4 / width))) + 'deg'
         )
       },
 
       onPanResponderRelease: () => {
+        panning = false
+        setRotateY('0deg')
+        pan.setValue({ x: 0, y: 0 });
         pan.extractOffset()
       },
     }),
   ).current
+
+  useEffect( () => {
+    if (panning) {
+      console.log('panning')
+
+      setOffsetX(
+        -pan.x.__getValue() * Math.min(Math.abs(pan.x.__getValue() / 1.5 / width),1)
+      )
+    } else {
+      console.log('nah')
+
+      setOffsetX(0)
+
+    }
+  })
 
   const words = useRef([])
 
@@ -89,19 +117,26 @@ export default function App() {
 
   return (
     <View style={styles.container}>
+      <LinearGradient
+        colors={['rgba(0,1,0,0)', 'transparent']}
+        style={{
+          /*transform: [
+            {translateX: -width},
+          ]*/
+        }}
+      />
+
       <Animated.View
         style={{
-          //backgroundColor: "#000000",
-
           transform: [
-            {translateX: pan.x},
+            {translateX: pan.x.__getValue() + offsetX},
             //{translateY: pan.y},
           ],
           width: '100%',
           height: '100%',
         }}
         {...panResponder.panHandlers}>
-
+        
         <Text
           numberOfLines={1}
           adjustsFontSizeToFit
