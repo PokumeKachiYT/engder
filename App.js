@@ -10,6 +10,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient } from 'expo-linear-gradient';
 
 let panning = false
+let canPan = false
+let words = null
 const maxRotation = 60
 
 let lastUpdate = Date.now()
@@ -34,6 +36,7 @@ const getData = async (key) => {
 export default function App() {
   const [rotateY, setRotateY] = useState('0deg')
   const [offsetX, setOffsetX] = useState(0)
+  const [word, setWord] = useState('Swipe if\n< this is a new word\nyou have already known this >')
 
   const pan = useRef(new Animated.ValueXY()).current
   
@@ -54,13 +57,20 @@ export default function App() {
       onPanResponderMove: (event, gestureState) => {
         panEvent(event, gestureState)
         setRotateY(
-          Math.max(-maxRotation,Math.min(maxRotation,pan.x.__getValue() * Math.abs(pan.x.__getValue() / 4 / width))) + 'deg'
+          Math.max(-maxRotation,Math.min(maxRotation,
+            pan.x.__getValue() * Math.abs(pan.x.__getValue() / 2 / width)
+          )) + 'deg'
         )
       },
 
       onPanResponderRelease: () => {
         panning = false
         setRotateY('0deg')
+        if (pan.x.__getValue() / width >= 0.15) {
+          setWord(
+            words[~~(Math.random() * words.length)]
+          )
+        }
         pan.setValue({ x: 0, y: 0 });
         pan.extractOffset()
       },
@@ -69,40 +79,41 @@ export default function App() {
 
   useEffect( () => {
     if (panning) {
-      console.log('panning')
+      //console.log('panning')
 
       setOffsetX(
         -pan.x.__getValue() * Math.min(Math.abs(pan.x.__getValue() / 1.5 / width),1)
       )
     } else {
-      console.log('nah')
+      //console.log('nah')
 
       setOffsetX(0)
 
     }
   })
 
-  const words = useRef([])
 
   useEffect( () => {
-    getData('100000-data')
-    .then( (arr) => {
-      words.current = arr
-      
-      if (words.current === null) {
-        fetch('https://www.mit.edu/~ecprice/wordlist.100000')
-        .then( (res) => {
-          if (res.ok) {
-            return res.text()
-          } else {
-            return 'holy shit bug found'
-          }
-        } )
-        .then( (data) => {
-          saveData('100000-data',data.split('\n'))
-        } )
-      }
-    } )
+    getData('10000-data')
+    .then( (arr) => {words = arr} )
+    
+    if (words === null) {
+      console.log('fetching data')
+      fetch('https://www.mit.edu/~ecprice/wordlist.10000')
+      .then( (res) => {
+        if (res.ok) {
+          return res.text()
+        } else {
+          return 'holy shit bug found'
+        }
+      } )
+      .then( (data) => {
+        words = data.split('\n')
+        saveData('10000-data',words)
+        console.log('got data!')
+      } )
+      .catch( (error) => console.log(error) )
+    }
   }, [])
 
   const [fontsLoaded] = useFonts({
@@ -156,7 +167,7 @@ export default function App() {
             width: '100%',
             height: '100%',
           }}
-        >life roblox</Text>
+        >{word}</Text>
       </Animated.View>
     </View>
   )
