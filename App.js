@@ -5,15 +5,16 @@ import { useFonts } from "expo-font"
 import { StatusBar } from 'expo-status-bar'
 import { StyleSheet, Text, View } from 'react-native'
 import { PanResponder, Animated } from 'react-native'
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useReducer } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {LinearGradient} from 'expo-linear-gradient';
 
 let panning = false
 let canPan = false
 let words = null
+let offsetX = 0.0
 
-const MAX_ROTATION = 60
+const MAX_ROTATION = 45
 const MAX_PAN = 0.1
 const MAX_GRAD_OPACITY = 0.25
 
@@ -50,12 +51,20 @@ const fetchData = () => {
     } ) 
 }
 
+const lerp = (start, end, alpha) => {
+  //return (1 - alpha) * start + alpha * end
+  return start + (end - start) * alpha
+}
+
 export default function App() {
-  const [rotateY, setRotateY] = useState('0deg')
-  const [offsetX, setOffsetX] = useState(0)
+  const [, forceUpdate] = useReducer(x => x + 1, 0);
+
+  const [rotation, setRotation] = useState('0deg')
   const [gradRed, setGradRed] = useState(0)
   const [gradGreen, setGradGreen] = useState(0)
   const [word, setWord] = useState("Swipe if you...\n< don't know this word\nknow this word >")
+
+  const [garbase, reset] = useState(0)
 
   const pan = useRef(new Animated.ValueXY()).current
   
@@ -74,16 +83,17 @@ export default function App() {
         return true
       },
       onPanResponderMove: (event, gestureState) => {
+        panEvent(event, gestureState)
+
         const xValue = pan.x.__getValue()
         const xRatio = xValue / width
 
-        panEvent(event, gestureState)
-        setRotateY(
+        setRotation(
           Math.max(-MAX_ROTATION,Math.min(MAX_ROTATION,
-            xValue * Math.abs(xValue / 2 / width)
+            xValue / 10.0 * Math.abs(xRatio)
           )) + 'deg'
         )
-
+        
         if (xRatio >= MAX_PAN) {
           setGradGreen(Math.min(MAX_GRAD_OPACITY,(xRatio - MAX_PAN)))
         } else {
@@ -91,23 +101,25 @@ export default function App() {
         }
 
         if (xRatio <= -MAX_PAN) {
-          setGradRed(Math.max(-MAX_GRAD_OPACITY,(MAX_PAN - xRatio) / 2))
+          setGradRed(Math.max(-MAX_GRAD_OPACITY,(MAX_PAN - xRatio)/2))
         } else {
           setGradRed(0)
         }
-      },
 
+        offsetX = - xValue / 2.0 * Math.abs(xRatio)
+
+        forceUpdate()
+      },
       onPanResponderRelease: () => {
         const xValue = pan.x.__getValue()
         const xRatio = xValue / width
 
         panning = false
-        setRotateY('0deg')
+        setRotation('0deg')
         canPan = ~canPan
         setGradGreen(0)
         setGradRed(0)
-
-        pan.setValue({ x: 0, y: 0 });
+        offsetX = 0
 
         pan.extractOffset()
 
@@ -120,14 +132,16 @@ export default function App() {
 
   useEffect( () => {
     if (panning) {
-      setOffsetX(
-        -pan.x.__getValue() * Math.min(1,Math.abs(pan.x.__getValue() / 1.5 / width))
-      )
+
     } else {
-      setOffsetX(0)
+      pan.setValue({ x: lerp(pan.x.__getValue(), 0, .1), y: 0 });
+
+      if (Math.abs(pan.x.__getValue()) > 0.1) {
+        console.log(pan.x.__getValue())
+        forceUpdate()
+      }
     }
   })
-
 
   useEffect( () => {
     getData('10000-data')
@@ -164,6 +178,7 @@ export default function App() {
         style={{
           transform: [
             {translateX: pan.x.__getValue() + offsetX},
+            {translateY: -Math.abs(pan.x.__getValue()) * 0.1},
           ],
           width: '100%',
           height: '100%',
@@ -177,7 +192,7 @@ export default function App() {
             fontFamily: 'SoftBold',
             
             transform: [
-              {rotateY: rotateY},
+              {rotateZ: rotation},
             ],
 
             color: '#6200EE',
