@@ -9,14 +9,27 @@ import React, { useState, useEffect, useRef, useReducer } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {LinearGradient} from 'expo-linear-gradient';
 
-let panning = false
-let canPan = false
 let words = null
-let offsetX = 0.0
 
-const MAX_ROTATION = 45
-const MAX_PAN = 0.1
+let panning = false
+let viewDef = false
+
+let posX = 0.0
+let gradRed = 0.0
+let gradGreen = 0.0
+let rotation = 0
+
+let isWord = false
+const normalColor = '#920050'
+let textColor = normalColor
+
+let word = "Swipe right for the next word, left for definition"
+
+const MAX_ROTATION = 20
+const MAX_PAN = 0.05
 const MAX_GRAD_OPACITY = 0.25
+
+const API_KEY = "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"
 
 const saveData = async (key, value) => {
   try {
@@ -36,7 +49,7 @@ const getData = async (key) => {
 }
 
 const fetchData = () => {
-  fetch('https://www.mit.edu/~ecprice/wordlist.10000')
+  fetch('https://websites.umich.edu/~jlawler/wordlist')
     .then( (res) => res.text() )
     .then( (data) => {
       words = data.split('\n')
@@ -51,30 +64,17 @@ const fetchData = () => {
     } ) 
 }
 
-const lerp = (start, end, alpha) => {
-  //return (1 - alpha) * start + alpha * end
-  return start + (end - start) * alpha
+const nextWord = () => {
+  word = words[~~(Math.random() * words.length)]
+  textColor = '#6200EE'
+  isWord = true
 }
+
+const lerp = (start, end, alpha) => ((1.0 - alpha) * start + alpha * end)
 
 export default function App() {
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
-  const [rotation, setRotation] = useState('0deg')
-  const [gradRed, setGradRed] = useState(0)
-  const [gradGreen, setGradGreen] = useState(0)
-  const [word, setWord] = useState("Swipe if you...\n< don't know this word\nknow this word >")
-
-  const [garbase, reset] = useState(0)
-
-  const pan = useRef(new Animated.ValueXY()).current
-  
-  const panEvent = Animated.event(
-    [
-      null,
-      {dx: pan.x, dy: pan.y}
-    ],
-    {useNativeDriver: false}
-  )
 
   const panResponder = useRef(
     PanResponder.create({
@@ -83,65 +83,121 @@ export default function App() {
         return true
       },
       onPanResponderMove: (event, gestureState) => {
-        panEvent(event, gestureState)
-
-        const xValue = pan.x.__getValue()
+        const xValue = gestureState.dx
         const xRatio = xValue / width
 
-        setRotation(
-          Math.max(-MAX_ROTATION,Math.min(MAX_ROTATION,
-            xValue / 10.0 * Math.abs(xRatio)
-          )) + 'deg'
-        )
+        posX = xValue / 2.0 * Math.abs(xRatio)
+
+        rotation = Math.max(-MAX_ROTATION,Math.min(MAX_ROTATION,
+          xValue / 30.0 * Math.abs(xRatio)
+        ))
         
         if (xRatio >= MAX_PAN) {
-          setGradGreen(Math.min(MAX_GRAD_OPACITY,(xRatio - MAX_PAN)))
+          gradGreen = Math.min(MAX_GRAD_OPACITY,(xRatio - MAX_PAN))
         } else {
-          setGradGreen(0)
+          gradGreen = 0.0
         }
 
         if (xRatio <= -MAX_PAN) {
-          setGradRed(Math.max(-MAX_GRAD_OPACITY,(MAX_PAN - xRatio)/2))
+          gradRed = Math.min(MAX_GRAD_OPACITY,(MAX_PAN - xRatio)/2)
         } else {
-          setGradRed(0)
+          gradRed = 0.0
         }
-
-        offsetX = - xValue / 2.0 * Math.abs(xRatio)
 
         forceUpdate()
       },
-      onPanResponderRelease: () => {
-        const xValue = pan.x.__getValue()
+      onPanResponderRelease: (event, gestureState) => {
+        const xValue = posX
         const xRatio = xValue / width
 
-        panning = false
-        setRotation('0deg')
-        canPan = ~canPan
-        setGradGreen(0)
-        setGradRed(0)
-        offsetX = 0
+        const intervalID = setInterval(() => {
+          let update = false
 
-        pan.extractOffset()
+          if (Math.abs(posX) > 0.2) {
+            posX = lerp(posX,0.0,0.1)
+            update = true
+          }
+
+          if (Math.abs(rotation) > 0.1) {
+            rotation = lerp(rotation,0,0.1)
+            update = true
+          }
+      
+          if (Math.abs(gradGreen) > 0.01) {
+            gradGreen = lerp(gradGreen,0,0.05)
+            update = true
+          }
+
+          if (Math.abs(gradRed) > 0.01) {
+            gradRed = lerp(gradRed,0,0.05)
+            update = true
+          }
+
+          if (!update) clearInterval(intervalID)
+
+          forceUpdate()
+        }, 10);
 
         if (xRatio >= MAX_PAN) {
-          setWord(words[~~(Math.random() * words.length)])
+          nextWord()
+
+          forceUpdate()
+        }
+        if (xRatio <= -MAX_PAN) {
+          const body = {
+            "model": "gpt-3.5-turbo",
+            "messages" : [
+              {"role": "user","content": "define " + word + " in english in 7 words say nothing else"}
+            ],
+            "temperature": 0.7
+          }
+
+          /*fetch("https://api.openai.com/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + API_KEY,
+              },
+              body: JSON.stringify(body),
+            }).then(
+              (res) => {
+                if (res.ok) {
+                  console.log(res)
+                } else {
+                  setWord(words[~~(Math.random() * words.length)])
+                }
+              }
+            )*/
+
+          if (isWord) {
+            textColor = normalColor
+            fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + word).then(
+              (res) => {
+                if (res.ok) {
+                  res.json().then(
+                    (data) => {
+                      word = data[0].meanings[0].definitions[0].definition
+                      forceUpdate()
+                    }
+                  )
+                } else {
+                  nextWord()
+                }
+              }
+            )
+
+            isWord = false
+          } else {
+            nextWord()
+          }
+
+
+          forceUpdate()
         }
       },
     }),
   ).current
-
-  useEffect( () => {
-    if (panning) {
-
-    } else {
-      pan.setValue({ x: lerp(pan.x.__getValue(), 0, .1), y: 0 });
-
-      if (Math.abs(pan.x.__getValue()) > 0.1) {
-        console.log(pan.x.__getValue())
-        forceUpdate()
-      }
-    }
-  })
 
   useEffect( () => {
     getData('10000-data')
@@ -171,15 +227,11 @@ export default function App() {
         start={{x: 0,y: 0}}
         end={{x: 1,y: 0}}
         style={styles.linearGradient}
-        colors={['rgba(255,50,50,' + gradRed + ')','transparent','rgba(50,255,50,' + gradGreen + ')',]}
+        colors={[`rgba(255,50,50,${gradRed ? gradRed : 0.0})`,`transparent','rgba(50,255,50,${gradGreen ? gradGreen : 0.0})`,]}
       />
 
       <Animated.View
         style={{
-          transform: [
-            {translateX: pan.x.__getValue() + offsetX},
-            {translateY: -Math.abs(pan.x.__getValue()) * 0.1},
-          ],
           width: '100%',
           height: '100%',
         }}
@@ -192,10 +244,12 @@ export default function App() {
             fontFamily: 'SoftBold',
             
             transform: [
-              {rotateZ: rotation},
+              {translateX: posX},
+              {translateY: -Math.abs(posX) * 0.1},
+              {rotateZ: rotation + 'deg'},
             ],
 
-            color: '#6200EE',
+            color: textColor,
 
             alignSelf: 'center',
             textAlign: 'center',
